@@ -1,6 +1,6 @@
-# Virtual environments
-venv/
+# Virtual environment
 .venv/
+venv/
 
 # Python cache
 __pycache__/
@@ -12,23 +12,22 @@ __pycache__/
 # Environment variables
 .env
 
-# Large raw and processed data
+# Large hyperspectral dataset files
 data/raw/
 data/processed/
+data/splits/
+data/patches/
 
-# Model files
-models/
-*.pt
-*.pth
+# Large data formats
+*.mat
+*.npy
+
+# Trained model files
 *.h5
-*.pkl
-
-# Results generated during experiments
-results/
+*.keras
+*.pth
+*.pt
 
 # OS files
 .DS_Store
 Thumbs.db
-
-# VS Code local settings
-.vscode/
