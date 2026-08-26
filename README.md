@@ -1,256 +1,322 @@
-TerraSpectra 🌱🔬
-Hyperspectral Tomato Disease Classification Using Deep Learning
+Yes. Copy the following **entire content into one `README.md` file**, save it in:
 
-TerraSpectra is a deep learning project for classifying tomato leaf conditions using hyperspectral imaging data.
+```text
+E:\Terraspectra\README.md
+```
 
-The project uses hyperspectral cubes with 550 spectral bands and classifies samples into five categories using a 3D Convolutional Neural Network (3D-CNN).
+````markdown
+# TerraSpectra 🌱🔬
 
-🎯 Project Objective
+## Hyperspectral Tomato Disease Classification Using Deep Learning
 
-The objective is to develop a deep learning system that can classify hyperspectral tomato samples into the following classes:
+TerraSpectra is a deep learning project for classifying tomato leaf diseases using hyperspectral imaging data.
 
-Alternaria alternata
-Alternaria solani
-Botrytis cinerea
-Fusarium oxysporum
-Healthy
+The project uses hyperspectral cubes containing **550 spectral bands** and classifies samples into five categories using deep learning, primarily a **3D Convolutional Neural Network (3D-CNN)**.
 
-The project investigates how consistent hyperspectral preprocessing and 3D-CNN models can be used for plant disease classification.
+---
 
-📂 Dataset
+## 🎯 Project Objective
 
-The dataset contains 5 classes with 8 hyperspectral .mat files per class.
+The objective of TerraSpectra is to develop a deep learning system capable of classifying hyperspectral tomato samples into the following five classes:
 
-Dataset structure
-data/raw/tomato_hsi/
-│
-├── alternaria_alternata/
-│   ├── Alternaria_alternata_1.mat
-│   ├── ...
-│   └── Alternaria_alternata_8.mat
-│
-├── alternaria_solani/
-│   ├── Alternaria_solani_1.mat
-│   └── ...
-│
-├── botrytis_cinerea/
-│   ├── Botrytis_cinerea_1.mat
-│   └── ...
-│
-├── fusarium_oxysporum/
-│   ├── Fusarium_oxysporum_1.mat
-│   └── ...
-│
-└── healthy/
-    ├── Healthy_1.mat
-    └── Healthy_8.mat
-Total dataset
+1. Alternaria alternata
+2. Alternaria solani
+3. Botrytis cinerea
+4. Fusarium oxysporum
+5. Healthy
+
+The project focuses on using consistent hyperspectral preprocessing and deep learning to learn both spatial and spectral features.
+
+---
+
+# 📂 Dataset
+
+The dataset contains **5 classes**, with **8 hyperspectral `.mat` files per class**.
+
+### Dataset Classes
+
+```text
+1. Alternaria alternata
+2. Alternaria solani
+3. Botrytis cinerea
+4. Fusarium oxysporum
+5. Healthy
+````
+
+### Total Dataset
+
+```text
 5 classes × 8 files = 40 hyperspectral files
+```
 
-A typical hyperspectral cube has the shape:
+A typical hyperspectral cube has the following shape:
 
+```text
 (140, 280, 550)
+```
 
 Where:
 
-140 = Height
-280 = Width
-550 = Spectral bands
-🧪 Dataset Split
+* `140` = Image height
+* `280` = Image width
+* `550` = Spectral bands
 
-The dataset was split at the original hyperspectral file level.
+---
 
+# 📊 Dataset Split
+
+The dataset is split at the **original hyperspectral file level**.
+
+```text
 Files 1–6 → Training
 File 7    → Validation
 File 8    → Testing
-Final split
-Split	Files	Patches
-Training	30	960
-Validation	5	160
-Testing	5	160
+```
 
-This ensures that the model is evaluated on hyperspectral files that were not used during training.
+### Final Split
 
-⚙️ Initial Preprocessing Pipeline
+| Dataset    | Number of Files | Number of Patches |
+| ---------- | --------------: | ----------------: |
+| Training   |              30 |               960 |
+| Validation |               5 |               160 |
+| Testing    |               5 |               160 |
+
+This keeps test files separate from training files.
+
+---
+
+# ⚙️ Initial Preprocessing Pipeline
 
 The initial preprocessing pipeline performed:
 
-Raw .mat file
+```text
+Raw .mat File
       ↓
-Load hyperspectral cube
+Load Hyperspectral Cube
       ↓
-Check NaN / Infinite values
+Check NaN / Infinite Values
       ↓
-Min-Max normalization
+Normalization
       ↓
-PCA: 550 spectral bands → 30 components
+PCA: 550 Bands → 30 Components
       ↓
-Save processed .npy file
+Save Processed .npy File
+```
 
-For example:
+Example transformation:
 
-Original shape:
+```text
+Original:
 (140, 280, 550)
 
 After PCA:
 (140, 280, 30)
+```
 
-Initial PCA explained approximately 95%–99% variance, depending on the file.
+The initial PCA preprocessing retained approximately **95%–99% of variance**, depending on the file.
 
-⚠️ Initial Pipeline Issue
+---
 
-The first preprocessing pipeline fitted PCA independently for every .mat file.
+# ⚠️ Initial Pipeline Issue
+
+The original preprocessing pipeline fitted PCA independently for every `.mat` file.
 
 Conceptually:
 
-File 1 → Fit PCA → 30 components
-File 2 → Fit different PCA → 30 components
-File 3 → Fit different PCA → 30 components
+```text
+File 1 → Fit PCA → 30 Components
+File 2 → Fit Different PCA → 30 Components
+File 3 → Fit Different PCA → 30 Components
 ...
+```
 
-This could make the PCA component channels inconsistent between different hyperspectral files.
+This could result in inconsistent PCA feature representations between files.
 
-The initial model achieved:
+The previous experimental model achieved:
 
-Best validation accuracy: 52.50%
+```text
+Best Validation Accuracy: 52.50%
+```
 
-However, final evaluation on the untouched test set produced:
+However, evaluation on the held-out test set produced:
 
-Test accuracy: 23.13%
+```text
+Final Test Accuracy: 23.13%
+```
 
-This indicated poor generalization and motivated a redesign of the preprocessing pipeline.
+This showed poor generalization and motivated an improved preprocessing pipeline.
 
-🔄 Improved Shared PCA Pipeline
+---
 
-A new preprocessing pipeline was implemented to ensure consistent feature representation.
+# 🔄 Improved Shared PCA Pipeline
 
-New pipeline
-Raw hyperspectral files
+A new preprocessing pipeline was implemented using preprocessing models fitted only on the training data.
+
+## New Pipeline
+
+```text
+Raw Hyperspectral Files
         ↓
-Split files into Train / Validation / Test
+Split into Train / Validation / Test
         ↓
-Fit StandardScaler using TRAIN files only
+Fit StandardScaler on TRAIN Files Only
         ↓
-Fit ONE shared PCA using TRAIN files only
+Fit ONE Shared PCA on TRAIN Files Only
         ↓
-Save preprocessing models
+Save Scaler and PCA Models
         ↓
-Transform Training data
-Transform Validation data
-Transform Test data
+Transform Training Data
+Transform Validation Data
+Transform Test Data
         ↓
-Create patches
+Create Patches
         ↓
 Train 3D-CNN
-Important
+```
 
-Validation and test data are transformed using the same scaler and PCA fitted on the training data.
+### Important
 
-They are not used to fit preprocessing models.
+The validation and test datasets are **not used to fit the scaler or PCA**.
 
-🧠 Shared Preprocessing Models
+They use the same preprocessing models fitted using the training data.
+
+---
+
+# 🧠 Shared Preprocessing Models
 
 The following preprocessing models were created:
 
-models/preprocessing/
-├── shared_scaler.joblib
-└── shared_pca30.joblib
+```text
+models/
+└── preprocessing/
+    ├── shared_scaler.joblib
+    └── shared_pca30.joblib
+```
 
-These models were fitted using only the 30 training hyperspectral files.
+These preprocessing models were fitted using only the **30 training hyperspectral files**.
 
-🗂️ Shared PCA Processed Data
+---
 
-The improved processed data is stored separately:
+# 📁 Shared PCA Processed Dataset
 
-data/processed_shared_pca/
+The improved processed dataset is stored separately from the old preprocessing output:
+
+```text
+data/
+├── processed/
 │
-├── train/
-│   ├── alternaria_alternata/
-│   ├── alternaria_solani/
-│   ├── botrytis_cinerea/
-│   ├── fusarium_oxysporum/
-│   └── healthy/
-│
-├── val/
-│   ├── alternaria_alternata/
-│   ├── alternaria_solani/
-│   ├── botrytis_cinerea/
-│   ├── fusarium_oxysporum/
-│   └── healthy/
-│
-└── test/
-    ├── alternaria_alternata/
-    ├── alternaria_solani/
-    ├── botrytis_cinerea/
-    ├── fusarium_oxysporum/
-    └── healthy/
+└── processed_shared_pca/
+    ├── train/
+    │   ├── alternaria_alternata/
+    │   ├── alternaria_solani/
+    │   ├── botrytis_cinerea/
+    │   ├── fusarium_oxysporum/
+    │   └── healthy/
+    │
+    ├── val/
+    │   ├── alternaria_alternata/
+    │   ├── alternaria_solani/
+    │   ├── botrytis_cinerea/
+    │   ├── fusarium_oxysporum/
+    │   └── healthy/
+    │
+    └── test/
+        ├── alternaria_alternata/
+        ├── alternaria_solani/
+        ├── botrytis_cinerea/
+        ├── fusarium_oxysporum/
+        └── healthy/
+```
 
-Shared PCA preprocessing completed successfully:
+Shared preprocessing completed successfully:
 
+```text
 Train files processed: 30
 Validation files processed: 5
 Test files processed: 5
-🧩 Patch Creation
+```
+
+---
+
+# 🧩 Patch Creation
 
 Each processed hyperspectral cube is divided into spatial patches.
 
-Patch configuration
-Patch size: 32 × 32
-PCA components: 30
+### Patch Configuration
+
+```text
+Patch Size: 32 × 32
 Stride: 32
+Spectral/PCA Components: 30
+```
 
 Each patch has the shape:
 
+```text
 (32, 32, 30)
-Final dataset
-TRAIN -> X: (960, 32, 32, 30)
-VAL   -> X: (160, 32, 32, 30)
-TEST  -> X: (160, 32, 32, 30)
+```
 
-The dataset is balanced:
+### Final Shared PCA Dataset
 
-5 classes
-Equal number of patches per class within each split
-✅ Dataset Validation
+```text
+TRAIN -> X: (960, 32, 32, 30), y: (960,)
+VAL   -> X: (160, 32, 32, 30), y: (160,)
+TEST  -> X: (160, 32, 32, 30), y: (160,)
+```
 
-The shared PCA dataset was validated successfully.
+---
 
-Checks performed:
+# ✅ Dataset Validation
 
-Correct patch dimensions
-Matching X and y sample counts
-No NaN values
-No infinite values
-All 5 classes present
-Labels correctly encoded from 0 to 4
-Balanced class distribution
+The shared PCA dataset was successfully validated.
 
-Validation result:
+Validation checks included:
 
+* Correct patch dimensions
+* Matching feature and label sample counts
+* No NaN values
+* No infinite values
+* All 5 classes present
+* Labels encoded correctly from `0` to `4`
+* Balanced class distribution
+
+Final validation:
+
+```text
 TRAIN | Samples: 960 | Shape: (960, 32, 32, 30)
 VAL   | Samples: 160 | Shape: (160, 32, 32, 30)
 TEST  | Samples: 160 | Shape: (160, 32, 32, 30)
 
 ✓ ALL SHARED PCA DATASET VALIDATION CHECKS PASSED
 ✓ READY FOR FRESH MODEL TRAINING
-🤖 3D-CNN Model
+```
 
-The project uses a 3D-CNN to learn spatial and spectral features jointly.
+---
 
-Input data is converted from:
+# 🤖 3D-CNN Model
 
+The project uses a 3D Convolutional Neural Network to learn spatial and spectral features jointly.
+
+The patch data is converted from:
+
+```text
 (samples, 32, 32, 30)
+```
 
 to:
 
+```text
 (samples, 32, 32, 30, 1)
+```
 
-for Conv3D.
+for use with `Conv3D`.
 
-Architecture
+### Model Architecture
+
+```text
 Input
   ↓
-Conv3D (16 filters)
+Conv3D (16 Filters)
   ↓
 Batch Normalization
   ↓
@@ -258,7 +324,7 @@ MaxPooling3D
   ↓
 Dropout
   ↓
-Conv3D (32 filters)
+Conv3D (32 Filters)
   ↓
 Batch Normalization
   ↓
@@ -266,37 +332,63 @@ MaxPooling3D
   ↓
 Dropout
   ↓
-Conv3D (64 filters)
+Conv3D (64 Filters)
   ↓
 Batch Normalization
   ↓
-Global Average Pooling 3D
+GlobalAveragePooling3D
   ↓
 Dense (64)
   ↓
 Dropout
   ↓
 Dense (5, Softmax)
-📊 Current Experimental Results
-Previous preprocessing pipeline
-Best validation accuracy: 52.50%
-Final test accuracy:      23.13%
+```
 
-The test results showed poor generalization across classes.
+---
 
-Shared train-fitted PCA pipeline
+# 📈 Experimental Results
 
-A fresh 3D-CNN was trained using the corrected preprocessing pipeline.
+## Initial Pipeline
 
-Current result:
+```text
+Best Validation Accuracy: 52.50%
+Final Test Accuracy:      23.13%
+```
 
-Best training accuracy:   75.73%
-Best validation accuracy: 50.00%
-Best epoch:               8
+The held-out test results showed poor generalization.
 
-Although the validation accuracy is slightly below the previous pipeline's 52.50%, the shared PCA pipeline uses a more consistent preprocessing methodology.
+### Test Classification Results
 
-📁 Project Structure
+```text
+Test Accuracy: 23.13%
+```
+
+Some classes had zero recall, while the model predicted `Botrytis cinerea` much more frequently than other classes.
+
+This motivated the implementation of a shared train-fitted preprocessing pipeline.
+
+---
+
+## Shared PCA Pipeline
+
+A fresh 3D-CNN was trained using the corrected shared preprocessing pipeline.
+
+Current best result:
+
+```text
+Best Training Accuracy:   75.73%
+Best Validation Accuracy: 50.00%
+Best Epoch:               8
+```
+
+Although this validation result is slightly below the previous 52.50% validation result, the shared PCA pipeline provides a more consistent preprocessing methodology because the scaler and PCA are fitted using training data only.
+
+---
+
+# 📁 Project Structure
+
+```text
 Terraspectra/
 │
 ├── data/
@@ -312,8 +404,14 @@ Terraspectra/
 │   │
 │   └── patches_shared_pca/
 │       ├── train/
+│       │   ├── X_train.npy
+│       │   └── y_train.npy
 │       ├── val/
+│       │   ├── X_val.npy
+│       │   └── y_val.npy
 │       └── test/
+│           ├── X_test.npy
+│           └── y_test.npy
 │
 ├── models/
 │   ├── preprocessing/
@@ -345,54 +443,123 @@ Terraspectra/
 ├── requirements.txt
 ├── .gitignore
 └── README.md
-🚀 Current Project Status
-Completed
- Dataset selection and organization
- Downloaded 40 hyperspectral .mat files
- Inspected hyperspectral data
- Automated multi-class preprocessing
- PCA dimensionality reduction
- Dataset split into train, validation and test
- Patch creation
- Dataset validation
- Initial 3D-CNN training
- Hybrid model experiments
- Initial test evaluation
- Identified preprocessing consistency issue
- Implemented train-fitted shared StandardScaler
- Implemented shared PCA with 30 components
- Reprocessed all train, validation and test files
- Recreated shared-PCA patches
- Validated the new dataset
- Trained a fresh Shared-PCA 3D-CNN
- Achieved 50.00% validation accuracy with the corrected pipeline
-Current Stage
-Shared PCA preprocessing completed
+```
+
+---
+
+# 🚀 Current Project Status
+
+## Completed
+
+* [x] Dataset selection
+* [x] Dataset organization
+* [x] Downloaded 40 hyperspectral `.mat` files
+* [x] Inspected hyperspectral data
+* [x] Automated multi-class preprocessing
+* [x] PCA dimensionality reduction from 550 bands to 30 components
+* [x] Source-file-level dataset splitting
+* [x] Patch creation
+* [x] Dataset validation
+* [x] Initial 3D-CNN training
+* [x] Hybrid model experiments
+* [x] Initial held-out test evaluation
+* [x] Identified preprocessing consistency issue
+* [x] Implemented shared train-fitted StandardScaler
+* [x] Implemented shared train-fitted PCA
+* [x] Reprocessed all 40 files
+* [x] Recreated train, validation, and test patches
+* [x] Validated the shared PCA dataset
+* [x] Trained a fresh Shared-PCA 3D-CNN
+* [x] Achieved 50.00% best validation accuracy with the shared preprocessing pipeline
+
+## Current Stage
+
+```text
+Shared PCA Preprocessing Completed
         ↓
-Fresh 3D-CNN trained
+Shared PCA Patches Created
         ↓
-Best validation accuracy: 50.00%
+Dataset Validated
         ↓
-NEXT: Improve the Shared-PCA 3D-CNN
+Fresh 3D-CNN Trained
         ↓
-Select final model using validation data
+Best Validation Accuracy: 50.00%
         ↓
-Perform final evaluation on untouched test data
-🛠️ Technologies Used
-Python
-NumPy
-SciPy
-Scikit-learn
-TensorFlow / Keras
-Pandas
-Matplotlib
-Joblib
-▶️ Main Commands
-Shared PCA preprocessing
+NEXT: Improve Shared-PCA 3D-CNN
+        ↓
+Select Final Model Using Validation Data
+        ↓
+Final Evaluation on Untouched Test Data
+```
+
+---
+
+# 🛠️ Technologies Used
+
+* Python
+* NumPy
+* SciPy
+* Scikit-learn
+* TensorFlow
+* Keras
+* Pandas
+* Matplotlib
+* Joblib
+
+---
+
+# ▶️ How to Run
+
+## 1. Shared PCA Preprocessing
+
+```powershell
 python src\preprocess_shared_pca.py
-Create patches
+```
+
+## 2. Create Shared PCA Patches
+
+```powershell
 python src\create_patches_shared_pca.py
-Validate dataset
+```
+
+## 3. Validate Dataset
+
+```powershell
 python src\validate_shared_pca_dataset.py
-Train Shared-PCA 3D-CNN
+```
+
+## 4. Train Shared PCA 3D-CNN
+
+```powershell
 python src\train_shared_pca_3dcnn.py
+```
+
+---
+
+# 🔜 Next Steps
+
+1. Improve the Shared-PCA 3D-CNN using training and validation data only.
+2. Compare experimental models based on validation performance.
+3. Select the best model.
+4. Evaluate the selected model once on the untouched test set.
+5. Generate final evaluation metrics and visualizations.
+6. Prepare the final project report and presentation.
+
+---
+
+## 📌 Current Best Shared-PCA Result
+
+```text
+Best Training Accuracy:   75.73%
+Best Validation Accuracy: 50.00%
+Best Epoch:               8
+```
+
+**Project Status: In Progress 🚀**
+
+
+
+
+
+
+
