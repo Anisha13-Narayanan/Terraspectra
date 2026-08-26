@@ -1,10 +1,4 @@
-Yes. Copy the following **entire content into one `README.md` file**, save it in:
 
-```text
-E:\Terraspectra\README.md
-```
-
-````markdown
 # TerraSpectra 🌱🔬
 
 ## Hyperspectral Tomato Disease Classification Using Deep Learning
