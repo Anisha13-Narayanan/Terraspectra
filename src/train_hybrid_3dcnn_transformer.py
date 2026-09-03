@@ -6,7 +6,7 @@ from tensorflow.keras import layers, models, callbacks, regularizers
 
 
 # ==========================================================
-# TERRASPECTRA - IMPROVED 3D-CNN TRAINING
+# TERRASPECTRA - 3D-CNN + TRANSFORMER HYBRID
 # ==========================================================
 
 PROJECT_ROOT = Path(r"E:\Terraspectra")
@@ -18,12 +18,12 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 NUM_CLASSES = 5
 BATCH_SIZE = 8
 EPOCHS = 50
-LEARNING_RATE = 0.0005
+LEARNING_RATE = 0.0003
 SEED = 42
 
 
 # ==========================================================
-# 1. REPRODUCIBILITY
+# REPRODUCIBILITY
 # ==========================================================
 
 np.random.seed(SEED)
@@ -31,61 +31,43 @@ tf.random.set_seed(SEED)
 
 
 # ==========================================================
-# 2. LOAD DATASET
+# LOAD DATA
 # ==========================================================
 
 def load_dataset(split_name):
-    """Load features and labels for a dataset split."""
 
     split_dir = PATCHES_DIR / split_name
 
-    X_path = split_dir / f"X_{split_name}.npy"
-    y_path = split_dir / f"y_{split_name}.npy"
-
-    X = np.load(X_path)
-    y = np.load(y_path)
+    X = np.load(split_dir / f"X_{split_name}.npy")
+    y = np.load(split_dir / f"y_{split_name}.npy")
 
     print("\n" + "=" * 60)
     print(f"LOADED {split_name.upper()} DATA")
     print("=" * 60)
     print(f"X shape: {X.shape}")
     print(f"y shape: {y.shape}")
-    print(f"X dtype: {X.dtype}")
-    print(f"y dtype: {y.dtype}")
 
     return X, y
 
 
 # ==========================================================
-# 3. PREPARE DATA FOR 3D-CNN
+# PREPARE DATA
 # ==========================================================
 
 def prepare_data(X):
-    """
-    Original shape:
-    (samples, height, width, spectral_bands)
-
-    3D-CNN shape:
-    (samples, height, width, spectral_depth, channels)
-    """
-
     X = X.astype(np.float32)
-
-    # Add channel dimension
     X = np.expand_dims(X, axis=-1)
-
     return X
 
 
 # ==========================================================
-# 4. BUILD IMPROVED 3D-CNN
+# CONVOLUTION BLOCK
 # ==========================================================
 
-def conv_block(x, filters, dropout_rate=0.0):
-    """3D convolution block with Batch Normalization."""
+def conv_block(x, filters, dropout_rate):
 
     x = layers.Conv3D(
-        filters=filters,
+        filters,
         kernel_size=(3, 3, 3),
         padding="same",
         kernel_regularizer=regularizers.l2(1e-4)
@@ -95,7 +77,7 @@ def conv_block(x, filters, dropout_rate=0.0):
     x = layers.Activation("relu")(x)
 
     x = layers.Conv3D(
-        filters=filters,
+        filters,
         kernel_size=(3, 3, 3),
         padding="same",
         kernel_regularizer=regularizers.l2(1e-4)
@@ -104,59 +86,117 @@ def conv_block(x, filters, dropout_rate=0.0):
     x = layers.BatchNormalization()(x)
     x = layers.Activation("relu")(x)
 
-    if dropout_rate > 0:
-        x = layers.Dropout(dropout_rate)(x)
+    x = layers.Dropout(dropout_rate)(x)
 
     return x
 
 
-def build_3dcnn(input_shape, num_classes):
+# ==========================================================
+# TRANSFORMER ENCODER
+# ==========================================================
+
+def transformer_encoder(
+    inputs,
+    projection_dim=64,
+    num_heads=4,
+    transformer_units=128,
+    dropout_rate=0.2
+):
+
+    # Layer normalization before attention
+    x1 = layers.LayerNormalization(epsilon=1e-6)(inputs)
+
+    attention_output = layers.MultiHeadAttention(
+        num_heads=num_heads,
+        key_dim=projection_dim // num_heads,
+        dropout=dropout_rate
+    )(x1, x1)
+
+    # Residual connection
+    x2 = layers.Add()([inputs, attention_output])
+
+    # Feed-forward network
+    x3 = layers.LayerNormalization(epsilon=1e-6)(x2)
+
+    x3 = layers.Dense(
+        transformer_units,
+        activation="gelu"
+    )(x3)
+
+    x3 = layers.Dropout(dropout_rate)(x3)
+
+    x3 = layers.Dense(projection_dim)(x3)
+
+    # Residual connection
+    outputs = layers.Add()([x2, x3])
+
+    return outputs
+
+
+# ==========================================================
+# BUILD HYBRID MODEL
+# ==========================================================
+
+def build_hybrid_model(input_shape, num_classes):
 
     inputs = layers.Input(shape=input_shape)
 
     # ------------------------------------------------------
-    # Block 1
+    # 3D-CNN FEATURE EXTRACTION
     # ------------------------------------------------------
-    x = conv_block(
-        inputs,
-        filters=16,
-        dropout_rate=0.10
+
+    x = conv_block(inputs, 16, 0.10)
+    x = layers.MaxPool3D(pool_size=(2, 2, 2))(x)
+
+    x = conv_block(x, 32, 0.15)
+    x = layers.MaxPool3D(pool_size=(2, 2, 2))(x)
+
+    x = conv_block(x, 64, 0.20)
+
+    # Shape approximately:
+    # (batch, 8, 8, 7, 64)
+
+    # ------------------------------------------------------
+    # CONVERT CNN FEATURES TO TRANSFORMER TOKENS
+    # ------------------------------------------------------
+
+    x = layers.Reshape((-1, 64))(x)
+
+    # Project features to Transformer dimension
+    x = layers.Dense(64)(x)
+
+    # ------------------------------------------------------
+    # TRANSFORMER ENCODERS
+    # ------------------------------------------------------
+
+    x = transformer_encoder(
+        x,
+        projection_dim=64,
+        num_heads=4,
+        transformer_units=128,
+        dropout_rate=0.20
     )
 
-    x = layers.MaxPool3D(
-        pool_size=(2, 2, 2)
-    )(x)
-
-    # ------------------------------------------------------
-    # Block 2
-    # ------------------------------------------------------
-    x = conv_block(
+    x = transformer_encoder(
         x,
-        filters=32,
-        dropout_rate=0.15
-    )
-
-    x = layers.MaxPool3D(
-        pool_size=(2, 2, 2)
-    )(x)
-
-    # ------------------------------------------------------
-    # Block 3
-    # ------------------------------------------------------
-    x = conv_block(
-        x,
-        filters=64,
+        projection_dim=64,
+        num_heads=4,
+        transformer_units=128,
         dropout_rate=0.20
     )
 
     # ------------------------------------------------------
-    # Global feature extraction
+    # GLOBAL TOKEN AGGREGATION
     # ------------------------------------------------------
-    x = layers.GlobalAveragePooling3D()(x)
+
+    x = layers.LayerNormalization(epsilon=1e-6)(x)
+
+    x = layers.GlobalAveragePooling1D()(x)
 
     # ------------------------------------------------------
-    # Classification head
+    # CLASSIFICATION HEAD
     # ------------------------------------------------------
+
     x = layers.Dense(
         128,
         activation="relu",
@@ -183,51 +223,40 @@ def build_3dcnn(input_shape, num_classes):
     model = models.Model(
         inputs=inputs,
         outputs=outputs,
-        name="TerraSpectra_Improved_3D_CNN"
+        name="TerraSpectra_3DCNN_Transformer"
     )
 
     return model
 
 
 # ==========================================================
-# 5. MAIN TRAINING
+# MAIN TRAINING
 # ==========================================================
 
 def main():
 
     print("=" * 60)
-    print("TERRASPECTRA - IMPROVED 3D-CNN TRAINING")
+    print("TERRASPECTRA - 3D-CNN + TRANSFORMER HYBRID TRAINING")
     print("=" * 60)
 
-    # Create output directories
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # ------------------------------------------------------
-    # Load datasets
-    # ------------------------------------------------------
+    # Load train and validation data
     X_train, y_train = load_dataset("train")
     X_val, y_val = load_dataset("val")
 
-    # ------------------------------------------------------
-    # Prepare datasets
-    # ------------------------------------------------------
+    # Prepare for Conv3D
     X_train = prepare_data(X_train)
     X_val = prepare_data(X_val)
 
-    print("\n" + "=" * 60)
-    print("DATA AFTER 3D-CNN PREPARATION")
-    print("=" * 60)
-    print(f"X_train shape: {X_train.shape}")
-    print(f"X_val shape:   {X_val.shape}")
+    print("\nDATA AFTER PREPARATION")
+    print(f"X_train: {X_train.shape}")
+    print(f"X_val:   {X_val.shape}")
 
-    # ------------------------------------------------------
     # Build model
-    # ------------------------------------------------------
-    input_shape = X_train.shape[1:]
-
-    model = build_3dcnn(
-        input_shape=input_shape,
+    model = build_hybrid_model(
+        input_shape=X_train.shape[1:],
         num_classes=NUM_CLASSES
     )
 
@@ -240,16 +269,18 @@ def main():
     )
 
     print("\n" + "=" * 60)
-    print("MODEL ARCHITECTURE")
+    print("HYBRID MODEL ARCHITECTURE")
     print("=" * 60)
 
     model.summary()
 
     # ------------------------------------------------------
-    # Callbacks
+    # CALLBACKS
     # ------------------------------------------------------
 
-    best_model_path = MODELS_DIR / "best_improved_3dcnn.keras"
+    best_model_path = (
+        MODELS_DIR / "best_hybrid_3dcnn_transformer.keras"
+    )
 
     training_callbacks = [
 
@@ -278,11 +309,11 @@ def main():
     ]
 
     # ------------------------------------------------------
-    # Train
+    # TRAIN
     # ------------------------------------------------------
 
     print("\n" + "=" * 60)
-    print("STARTING IMPROVED 3D-CNN TRAINING")
+    print("STARTING HYBRID MODEL TRAINING")
     print("=" * 60)
 
     history = model.fit(
@@ -296,28 +327,30 @@ def main():
     )
 
     # ------------------------------------------------------
-    # Save final model
+    # SAVE FINAL MODEL
     # ------------------------------------------------------
 
-    final_model_path = MODELS_DIR / "final_improved_3dcnn.keras"
+    final_model_path = (
+        MODELS_DIR / "final_hybrid_3dcnn_transformer.keras"
+    )
 
     model.save(final_model_path)
 
     # ------------------------------------------------------
-    # Save training history
+    # SAVE HISTORY
     # ------------------------------------------------------
 
     history_df = pd.DataFrame(history.history)
 
     history_path = (
         RESULTS_DIR /
-        "training_history_improved_3dcnn.csv"
+        "training_history_hybrid_3dcnn_transformer.csv"
     )
 
     history_df.to_csv(history_path, index=False)
 
     # ------------------------------------------------------
-    # Calculate best results
+    # BEST RESULTS
     # ------------------------------------------------------
 
     best_train_accuracy = max(history.history["accuracy"])
@@ -331,46 +364,34 @@ def main():
         np.argmax(history.history["val_accuracy"]) + 1
     )
 
-    # ------------------------------------------------------
-    # Final summary
-    # ------------------------------------------------------
-
     print("\n" + "=" * 60)
-    print("IMPROVED 3D-CNN TRAINING COMPLETED")
+    print("HYBRID MODEL TRAINING COMPLETED")
     print("=" * 60)
 
-    print(f"Best model saved: {best_model_path}")
-    print(f"Final model saved: {final_model_path}")
+    print(f"Best model: {best_model_path}")
+    print(f"Final model: {final_model_path}")
     print(f"Training history: {history_path}")
 
-    print("\nFINAL EPOCH RESULTS")
-    print(
-        f"Training accuracy: "
-        f"{history.history['accuracy'][-1]:.4f}"
-    )
-    print(
-        f"Validation accuracy: "
-        f"{history.history['val_accuracy'][-1]:.4f}"
-    )
-
     print("\nBEST RESULTS")
+
     print(
         f"Best training accuracy: "
         f"{best_train_accuracy:.4f} "
         f"(Epoch {best_train_epoch})"
     )
+
     print(
         f"Best validation accuracy: "
         f"{best_val_accuracy:.4f} "
         f"(Epoch {best_val_epoch})"
     )
 
-    print("\nBaseline best validation accuracy: 0.4188")
+    print("\n3D-CNN benchmark validation accuracy: 0.5250")
 
-    if best_val_accuracy > 0.4188:
-        print("✓ Improved model performed better than baseline")
+    if best_val_accuracy > 0.5250:
+        print("✓ Hybrid model outperformed the Improved 3D-CNN")
     else:
-        print("⚠ Improved model did not beat the baseline yet")
+        print("⚠ Hybrid model did not outperform the Improved 3D-CNN")
 
     print("=" * 60)
 
