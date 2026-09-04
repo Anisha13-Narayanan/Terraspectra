@@ -13,6 +13,7 @@ __pycache__/
 .env
 
 # Large hyperspectral dataset files
+data/
 data/raw/
 data/processed/
 data/splits/
