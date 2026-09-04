@@ -21,11 +21,16 @@ class TerraSpectraApiTests(unittest.TestCase):
     def test_dashboard_and_health(self):
         dashboard = self.client.get("/")
         health = self.client.get("/health")
+        model_info = self.client.get("/model-info")
 
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn("TerraSpectra", dashboard.text)
         self.assertEqual(health.status_code, 200)
         self.assertTrue(health.json()["model_available"])
+        self.assertEqual(health.json()["framework"], "TensorFlow/Keras")
+        self.assertEqual(model_info.status_code, 200)
+        self.assertEqual(model_info.json()["deployment_model"], "best_shared_pca_3dcnn.keras")
+        self.assertEqual(model_info.json()["pytorch_hybrid_status"], "Experimental one-epoch CPU baseline only; it is retained for architecture research and is not served by the production API.")
 
     def test_predict_returns_five_probabilities(self):
         response = self.client.post("/predict", json={"patch": self.patch})
@@ -120,6 +125,12 @@ class TerraSpectraApiTests(unittest.TestCase):
         self.assertAlmostEqual(body["patch_predictions"][0]["longitude"], 75.0019, places=3)
         self.assertAlmostEqual(body["patch_predictions"][0]["latitude"], 41.5502, places=3)
         self.assertEqual(len(body["patch_predictions"][0]["polygon"]), 4)
+        self.assertGreater(body["patch_predictions"][0]["area_acres"], 0)
+        self.assertGreater(body["risk_summary"]["total_acres"], 0)
+        self.assertLessEqual(
+            body["risk_summary"]["at_risk_acres"],
+            body["risk_summary"]["total_acres"],
+        )
 
 
 if __name__ == "__main__":

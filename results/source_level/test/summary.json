@@ -1,0 +1,12 @@
+{
+  "model": "E:\\Terraspectra\\models\\best_shared_pca_3dcnn.keras",
+  "split": "test",
+  "source_file_counts": {
+    "train": 30,
+    "val": 5,
+    "test": 5
+  },
+  "evaluated_sources": 5,
+  "accuracy": 0.4,
+  "note": "One prediction per original source cube; source filenames are disjoint across splits."
+}

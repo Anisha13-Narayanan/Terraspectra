@@ -1,0 +1,27 @@
+{
+  "deployment_model": "best_shared_pca_3dcnn.keras",
+  "framework": "TensorFlow/Keras",
+  "architecture": "Shared-PCA 3D-CNN",
+  "input_shape": [32, 32, 30, 1],
+  "classes": [
+    "Alternaria alternata",
+    "Alternaria solani",
+    "Botrytis cinerea",
+    "Fusarium oxysporum",
+    "Healthy"
+  ],
+  "selection_basis": {
+    "patch_level_test_accuracy": 0.46875,
+    "patch_level_test_macro_f1": 0.3724525568593365,
+    "source_level_validation_accuracy": 0.6,
+    "source_level_validation_macro_f1": 0.5,
+    "source_level_test_accuracy": 0.4
+  },
+  "decision": "Deployed because it tied the strongest source-level validation result and outperformed the available ViT and hybrid alternatives on the existing held-out patch evaluation.",
+  "pytorch_hybrid_status": "Experimental one-epoch CPU baseline only; it is retained for architecture research and is not served by the production API.",
+  "limitations": [
+    "Small source-level validation and test sets contain only five cubes each.",
+    "Patch-level measurements are correlated within a source cube.",
+    "This is a disease-classification prototype, not a validated pre-symptom forecasting system."
+  ]
+}

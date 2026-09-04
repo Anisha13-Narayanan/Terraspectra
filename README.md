@@ -37,6 +37,14 @@ preprocessing, patch-level predictions, confidence calibration, explainability,
 and a pixel-coordinate disease distribution map. These results are baselines;
 the model should not be treated as a production diagnostic system.
 
+Patch scores are not the only reported evaluation: the model is also evaluated
+by averaging patch probabilities into one prediction for each original source
+cube. The current source-file audit confirms that the 30 training, 5 validation,
+and 5 test cube filenames are disjoint. On this small five-cube-per-split
+evaluation, the shared-PCA 3D-CNN achieved 60.00% validation accuracy and
+40.00% untouched-test accuracy. These source-level estimates should accompany
+the patch metrics because patches from one cube are correlated.
+
 ## React Frontend
 
 The React/Deck.gl frontend is in `frontend/`. Node.js 18+ and npm are required.
@@ -73,6 +81,18 @@ The bounded one-epoch smoke baseline reached 40.62% validation accuracy. The
 TensorFlow shared-PCA 3D-CNN remains the application model at 46.88% test
 accuracy; the PyTorch model is included to satisfy the alternate ML engineering
 implementation and is not silently substituted into the API.
+
+## Deployment Model Decision
+
+The FastAPI service deliberately deploys the TensorFlow/Keras Shared-PCA 3D-CNN
+(`models/best_shared_pca_3dcnn.keras`). It tied the strongest source-level
+validation result (60.00%, macro F1 0.50) and has the best available held-out
+patch-level result (46.88%, macro F1 0.3725). The PyTorch 3D-CNN + Transformer
+is retained as an experimental, one-epoch CPU baseline and is not served until
+it has comparable validation evidence. The decision, metrics, and limitations
+are versioned in `models/deployment_manifest.json` and available at
+`GET /model-info`.
+
 Bootstrap uncertainty for the best model can be generated with:
 
 ```powershell
@@ -82,6 +102,17 @@ Bootstrap uncertainty for the best model can be generated with:
 The current patch-level 95% accuracy interval is 39.38% to 55.00%. Because
 patches from one source image are correlated, source-file-level cross-validation
 is still required for stronger final claims.
+
+Generate source-level validation or test artifacts with:
+
+```powershell
+.venv\Scripts\python.exe src\evaluate_source_level.py --split val
+.venv\Scripts\python.exe src\evaluate_source_level.py --split test
+```
+
+The evaluator verifies there are no source-file names shared by the three
+splits, averages every cube's patch probabilities into one source prediction,
+and writes results under `results/source_level/`.
 
 ---
 

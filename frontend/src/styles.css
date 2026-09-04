@@ -41,4 +41,12 @@ button:hover { background: #fde725; }
 .map-note { position: absolute; left: 12px; bottom: 12px; background: rgba(255,254,242,.9); padding: 7px 9px; color: #55716b; font: 11px Arial, sans-serif; }
 .empty { display: grid; place-items: center; min-height: 430px; color: #55716b; text-align: center; }
 footer { border-top: 1px solid #bfd8ae; border-bottom: 0; margin-top: 28px; padding-top: 20px; color: #55716b; font: 11px Arial, sans-serif; }
+.history-panel { display: flex; align-items: end; gap: 24px; border-top: 1px solid #bfd8ae; padding-top: 20px; margin-top: 20px; }
+.date-input { display: flex; flex-direction: column; gap: 6px; color: #55716b; font: 11px Arial, sans-serif; letter-spacing: .6px; }
+.date-input input { border: 1px solid #bfd8ae; background: #fffef2; color: #18312f; padding: 8px; }
+.timeline { flex: 1; color: #55716b; font: 12px Arial, sans-serif; }
+.timeline > div:first-child { display: flex; justify-content: space-between; align-items: center; }
+.timeline > div:first-child strong { color: #18312f; font: 400 15px Georgia, serif; }
+.timeline input { width: 100%; accent-color: #21918c; }
+.timeline-labels { display: flex; justify-content: space-between; }
 @media (max-width: 800px) { .shell { padding: 24px 16px; } .hero { display: block; padding: 52px 0; } .metric { margin-top: 28px; } .workspace { grid-template-columns: 1fr; } .analytics { grid-template-columns: repeat(2, 1fr); } .topbar { align-items: start; gap: 20px; } footer { display: block; line-height: 2; } }

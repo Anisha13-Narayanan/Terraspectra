@@ -58,10 +58,11 @@ function FieldMap({ patches }) {
 }
 
 function Analytics({ result }) {
-  const affected = result.patch_predictions.filter(
+  const summary = result.risk_summary || {};
+  const affected = summary.patches_at_risk ?? result.patch_predictions.filter(
     (patch) => patch.predicted_label !== 4,
   ).length;
-  const riskPercentage = (affected / result.patch_count) * 100;
+  const riskPercentage = summary.patch_risk_percent ?? (affected / result.patch_count) * 100;
   const metadata = result.geospatial_metadata || {};
 
   return (
@@ -69,8 +70,20 @@ function Analytics({ result }) {
       <div><strong>{result.patch_count}</strong><span>total patches</span></div>
       <div><strong>{affected}</strong><span>patches at risk</span></div>
       <div><strong>{riskPercentage.toFixed(1)}%</strong><span>estimated patch risk</span></div>
-      <div><strong>n/a</strong><span>acreage requires spatial resolution</span></div>
+      <div><strong>{summary.at_risk_acres === undefined ? "n/a" : `${summary.at_risk_acres.toFixed(2)} ac`}</strong><span>{summary.at_risk_acres === undefined ? "acreage requires georeferencing" : `of ${summary.total_acres.toFixed(2)} total acres`}</span></div>
       {metadata.crs && <p className="map-meta">CRS: {metadata.crs} · geospatial bounds preserved</p>}
+    </div>
+  );
+}
+
+function AnalysisTimeline({ observations, activeIndex, onSelect }) {
+  if (observations.length < 2) return null;
+  const active = observations[activeIndex];
+  return (
+    <div className="timeline">
+      <div><span className="kicker">03 / HISTORY</span><strong>{active.observationDate}</strong></div>
+      <input type="range" min="0" max={observations.length - 1} value={activeIndex} onChange={(event) => onSelect(Number(event.target.value))} />
+      <div className="timeline-labels"><span>{observations[0].observationDate}</span><span>{observations[observations.length - 1].observationDate}</span></div>
     </div>
   );
 }
@@ -78,6 +91,9 @@ function Analytics({ result }) {
 function App() {
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
+  const [observationDate, setObservationDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [observations, setObservations] = useState([]);
+  const [activeObservation, setActiveObservation] = useState(0);
   const [error, setError] = useState("");
   const [online, setOnline] = useState(false);
 
@@ -95,6 +111,13 @@ function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Analysis failed");
       setResult(data);
+      setObservations((previous) => {
+        const next = previous.filter((item) => item.observationDate !== observationDate);
+        next.push({ ...data, observationDate });
+        next.sort((left, right) => left.observationDate.localeCompare(right.observationDate));
+        setActiveObservation(next.findIndex((item) => item.observationDate === observationDate));
+        return next;
+      });
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -106,6 +129,10 @@ function App() {
       <section className="hero"><div><p className="kicker">FIELD SIGNALS</p><h2>Read plant stress<br />at pixel scale.</h2><p className="lede">Upload a hyperspectral MATLAB, HDF5, or GeoTIFF cube to transform spectral signatures into a disease distribution map.</p></div><div className="metric"><strong>46.88%</strong><span>current held-out accuracy</span></div></section>
       <section className="workspace"><div className="control-panel"><p className="kicker">01 / INGEST</p><h3>Analyze a field cube</h3><label className="dropzone"><input type="file" accept=".mat,.h5,.hdf5,.tif,.tiff" onChange={(event) => setFile(event.target.files[0])} /><span>{file ? file.name : "Choose a geospatial cube"}</span><small>MAT / HDF5 / GeoTIFF · shared PCA · 32 × 32 tiling</small></label><button onClick={analyze}>Run field analysis</button>{error && <p className="error">{error}</p>}</div><div className="result-panel"><p className="kicker">02 / SIGNAL MAP</p>{result ? <><div className="result-head"><div><h3>{result.predicted_class}</h3><span>{result.patch_count} patches analyzed</span></div><strong>{result.confidence_percent.toFixed(1)}%</strong></div><div className="probabilities">{Object.entries(result.probabilities).map(([name, value]) => <div className="probability" key={name}><span>{name}</span><span>{(value * 100).toFixed(1)}%</span><i><b style={{ width: `${value * 100}%` }} /></i></div>)}</div><Analytics result={result} /><FieldMap patches={result.patch_predictions} /></> : <div className="empty">Upload a field cube to reveal its spatial disease pattern.</div>}</div></section>
       <footer><span>Shared-PCA 3D-CNN · calibrated inference</span><span>Pixel coordinates · human review required</span></footer>
+      <section className="history-panel">
+        <label className="date-input"><span>Observation date</span><input type="date" value={observationDate} onChange={(event) => setObservationDate(event.target.value)} /></label>
+        <AnalysisTimeline observations={observations} activeIndex={activeObservation} onSelect={(index) => { setActiveObservation(index); setResult(observations[index]); }} />
+      </section>
     </main>
   );
 }

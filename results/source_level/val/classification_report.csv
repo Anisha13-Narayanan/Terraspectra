@@ -1,0 +1,9 @@
+,precision,recall,f1-score,support
+Alternaria alternata,0.0,0.0,0.0,1.0
+Alternaria solani,1.0,1.0,1.0,1.0
+Botrytis cinerea,1.0,1.0,1.0,1.0
+Fusarium oxysporum,0.3333333333333333,1.0,0.5,1.0
+Healthy,0.0,0.0,0.0,1.0
+accuracy,0.6,0.6,0.6,0.6
+macro avg,0.4666666666666667,0.6,0.5,5.0
+weighted avg,0.4666666666666667,0.6,0.5,5.0

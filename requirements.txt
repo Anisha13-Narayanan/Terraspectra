@@ -9,4 +9,5 @@ uvicorn
 python-multipart
 h5py
 rasterio
+pyproj
 torch
