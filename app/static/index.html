@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TerraSpectra</title>
+  <style>
+    :root { --ink:#18312f; --muted:#55716b; --leaf:#5ec962; --mint:#d8efc7; --cream:#f3f6df; --line:#bfd8ae; --panel:#fffef2; --teal:#21918c; --yellow:#fde725; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:radial-gradient(circle at 88% 8%, #e1f2c2 0, transparent 28%), var(--cream); font:16px Georgia, serif; }
+    main { max-width:1100px; margin:auto; padding:48px 24px; }
+    header { display:flex; justify-content:space-between; align-items:end; border-bottom:1px solid var(--line); padding-bottom:28px; }
+    h1 { margin:0; font-size:clamp(2.4rem, 7vw, 5.5rem); font-weight:400; letter-spacing:0; line-height:.9; }
+    .eyebrow { color:var(--teal); font:700 12px Arial, sans-serif; letter-spacing:2px; text-transform:uppercase; }
+    .status { color:var(--muted); font:14px Arial, sans-serif; }
+    section { display:grid; grid-template-columns:1.1fr .9fr; gap:24px; padding-top:32px; }
+    .panel { border:1px solid var(--line); background:rgba(255,254,242,.96); padding:24px; box-shadow:0 18px 50px rgba(47,91,57,.12); }
+    h2 { margin:0 0 16px; font-size:1.45rem; font-weight:400; }
+    p { color:var(--muted); line-height:1.5; }
+    textarea { width:100%; min-height:230px; resize:vertical; border:1px solid var(--line); padding:14px; color:var(--ink); background:#f5f8e8; font:13px Consolas, monospace; }
+    button { border:0; background:var(--leaf); color:#11351e; padding:13px 18px; margin-top:14px; cursor:pointer; font:700 13px Arial, sans-serif; }
+    button:hover { background:var(--yellow); }
+    button.secondary { background:var(--mint); color:var(--teal); margin-left:8px; }
+    .result { min-height:260px; display:flex; flex-direction:column; justify-content:center; }
+    .label { color:var(--muted); font:12px Arial, sans-serif; text-transform:uppercase; letter-spacing:1px; }
+    .disease { margin:8px 0 20px; color:var(--leaf); font-size:2.2rem; }
+    .confidence { font-size:1.3rem; }
+    .bar { height:9px; margin:8px 0 12px; background:#e3efd4; }
+    .fill { height:100%; background:var(--teal); }
+    .error { color:#a43e31; font-family:Arial, sans-serif; }
+    input[type=file] { width:100%; padding:13px; border:1px solid var(--line); background:#f5f8e8; color:var(--muted); font:14px Arial, sans-serif; }
+    .summary { margin-top:12px; color:var(--muted); font:14px Arial, sans-serif; }
+    .map-panel { margin-top:24px; }
+    #fieldMap { width:100%; height:auto; min-height:240px; }
+    .legend { display:flex; flex-wrap:wrap; gap:14px; margin-top:14px; font:13px Arial, sans-serif; color:var(--muted); }
+    .legend span { display:flex; align-items:center; gap:6px; }
+    .swatch { width:13px; height:13px; display:inline-block; }
+    .visuals { margin-top:24px; }
+    canvas { display:block; width:100%; height:auto; border:1px solid var(--line); background:#f5f8e8; }
+    #spectral { height:180px; }
+    @media (max-width:760px) { main { padding:28px 16px; } header { display:block; } .status { margin-top:20px; } section { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><div><div class="eyebrow">Hyperspectral plant analysis</div><h1>TerraSpectra</h1></div><div id="status" class="status">Checking model...</div></header>
+    <section>
+      <div class="panel"><h2>Analyze a PCA patch</h2><p>Paste a JSON array containing one 32 × 32 × 30 shared-PCA patch.</p><textarea id="patch" placeholder="[[[0, 0, ...], ...], ...]"></textarea><button id="run">Run prediction</button><button id="explain" class="secondary">Explain</button><hr><h2>Analyze a MATLAB image</h2><input id="matFile" type="file" accept=".mat"><button id="upload">Upload and predict</button><div id="message"></div></div>
+      <div class="panel result"><div class="label">Prediction</div><div id="disease" class="disease">Awaiting patch</div><div id="confidence" class="confidence"></div><div id="probabilities"></div></div>
+    </section>
+    <section class="visuals">
+      <div class="panel"><h2>Spatial importance</h2><canvas id="heatmap" width="320" height="320"></canvas></div>
+      <div class="panel"><h2>PCA component importance</h2><canvas id="spectral" width="520" height="180"></canvas></div>
+    </section>
+    <section class="map-panel"><div class="panel"><h2>GIS disease distribution</h2><canvas id="fieldMap" width="800" height="420"></canvas><div id="legend" class="legend"></div><div id="mapSummary" class="summary">Upload a MATLAB image to map patch predictions.</div></div></section>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    const classColors = ['#c15b4a', '#d49a3a', '#7b6299', '#3d7890', '#5b8f62'];
+    const drawFieldMap = patches => {
+      const canvas = $('fieldMap'), context = canvas.getContext('2d');
+      const maxRow = Math.max(...patches.map(p => p.row)), maxColumn = Math.max(...patches.map(p => p.column));
+      const columns = maxColumn / 32 + 1, rows = maxRow / 32 + 1;
+      const cellWidth = canvas.width / columns, cellHeight = canvas.height / rows;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#f5f8e8'; context.fillRect(0, 0, canvas.width, canvas.height);
+      patches.forEach(patch => { const x = patch.column / 32 * cellWidth, y = patch.row / 32 * cellHeight; context.fillStyle = classColors[patch.predicted_label]; context.globalAlpha = .45 + patch.confidence * .55; context.fillRect(x + 1, y + 1, cellWidth - 2, cellHeight - 2); });
+      context.globalAlpha = 1; context.strokeStyle = '#ffffff'; context.lineWidth = 1; for (let x = 0; x <= columns; x++) { context.beginPath(); context.moveTo(x * cellWidth, 0); context.lineTo(x * cellWidth, canvas.height); context.stroke(); } for (let y = 0; y <= rows; y++) { context.beginPath(); context.moveTo(0, y * cellHeight); context.lineTo(canvas.width, y * cellHeight); context.stroke(); }
+      $('legend').innerHTML = Object.entries(classColors).map(([label, color]) => `<span><i class="swatch" style="background:${color}"></i>${['Alternaria alternata','Alternaria solani','Botrytis cinerea','Fusarium oxysporum','Healthy'][label]}</span>`).join('');
+      $('mapSummary').textContent = `${patches.length} patches mapped · color shows predicted class · opacity shows confidence`;
+    };
+    fetch('/health').then(r => r.json()).then(x => $('status').textContent = x.model_available ? 'Model online' : 'Model unavailable').catch(() => $('status').textContent = 'API unavailable');
+    $('run').onclick = async () => {
+      $('message').textContent = '';
+      try {
+        const patch = JSON.parse($('patch').value);
+        const response = await fetch('/predict', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({patch}) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Prediction failed');
+        $('disease').textContent = data.predicted_class;
+        $('confidence').textContent = `${data.confidence_percent.toFixed(2)}% confidence${data.confidence_warning ? ' · review recommended' : ''}`;
+        $('probabilities').innerHTML = Object.entries(data.probabilities).map(([name, value]) => `<div class="label">${name} · ${(value*100).toFixed(1)}%</div><div class="bar"><div class="fill" style="width:${value*100}%"></div></div>`).join('');
+      } catch (error) { $('message').innerHTML = `<p class="error">${error.message}</p>`; }
+    };
+    $('explain').onclick = async () => {
+      $('message').textContent = '';
+      try {
+        const patch = JSON.parse($('patch').value);
+        const response = await fetch('/explain', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({patch}) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Explanation failed');
+        $('disease').textContent = data.predicted_class;
+        $('confidence').textContent = `${data.confidence_percent.toFixed(2)}% confidence${data.confidence_warning ? ' · review recommended' : ''}`;
+        const heatmap = $('heatmap'), heatContext = heatmap.getContext('2d'), spatial = data.spatial_importance;
+        spatial.forEach((row, y) => row.forEach((value, x) => { const hue = 45 - value * 45; heatContext.fillStyle = `hsl(${hue}, 85%, ${35 + value * 35}%)`; heatContext.fillRect(x * 10, y * 10, 10, 10); }));
+        const chart = $('spectral'), chartContext = chart.getContext('2d'), values = data.spectral_importance, width = chart.width, height = chart.height;
+        chartContext.clearRect(0, 0, width, height); chartContext.strokeStyle = '#2f6b4f'; chartContext.lineWidth = 3; chartContext.beginPath();
+        values.forEach((value, index) => { const x = 16 + index * (width - 32) / (values.length - 1); const y = height - 18 - value * (height - 36); index ? chartContext.lineTo(x, y) : chartContext.moveTo(x, y); }); chartContext.stroke();
+      } catch (error) { $('message').innerHTML = `<p class="error">${error.message}</p>`; }
+    };
+    $('upload').onclick = async () => {
+      $('message').textContent = '';
+      const file = $('matFile').files[0];
+      if (!file) { $('message').innerHTML = '<p class="error">Choose a .mat file first.</p>'; return; }
+      try {
+        const form = new FormData(); form.append('file', file);
+        const response = await fetch('/predict-mat', { method:'POST', body:form });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'MAT prediction failed');
+        $('disease').textContent = data.predicted_class;
+        $('confidence').textContent = `${data.confidence_percent.toFixed(2)}% image confidence${data.confidence_warning ? ' · review recommended' : ''}`;
+        $('probabilities').innerHTML = Object.entries(data.probabilities).map(([name, value]) => `<div class="label">${name} · ${(value*100).toFixed(1)}%</div><div class="bar"><div class="fill" style="width:${value*100}%"></div></div>`).join('') + `<div class="summary">${data.patch_count} spatial patches analyzed from ${data.filename}</div>`;
+        drawFieldMap(data.patch_predictions);
+      } catch (error) { $('message').innerHTML = `<p class="error">${error.message}</p>`; }
+    };
+  </script>
+</body>
+</html>

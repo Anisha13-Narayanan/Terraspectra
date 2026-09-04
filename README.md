@@ -21,6 +21,68 @@ The objective of TerraSpectra is to develop a deep learning system capable of cl
 
 The project focuses on using consistent hyperspectral preprocessing and deep learning to learn both spatial and spectral features.
 
+## Current Verified Status
+
+The shared-PCA 3D-CNN is currently the strongest evaluated model:
+
+| Model | Test accuracy | Macro F1 |
+| --- | ---: | ---: |
+| Shared-PCA 3D-CNN | 46.88% | 0.3725 |
+| Shared-PCA ViT | 33.12% | 0.2825 |
+| Shared-PCA Hybrid | 20.00% | 0.1000 |
+| Shared-PCA Augmented 3D-CNN | 19.38% | 0.1313 |
+
+The local FastAPI dashboard supports `.mat` upload, shared scaler/PCA
+preprocessing, patch-level predictions, confidence calibration, explainability,
+and a pixel-coordinate disease distribution map. These results are baselines;
+the model should not be treated as a production diagnostic system.
+
+## React Frontend
+
+The React/Deck.gl frontend is in `frontend/`. Node.js 18+ and npm are required.
+Run it with:
+
+```powershell
+cd frontend
+npm install
+$env:VITE_API_URL = "http://127.0.0.1:8000"
+$env:VITE_MAPBOX_TOKEN = "your_mapbox_token"
+npm run dev
+```
+
+The Mapbox token is optional. Without it, Deck.gl still renders the local
+pixel-coordinate disease overlay; with it, the map uses a Mapbox basemap.
+
+The API also exposes `POST /predict-geospatial` for `.mat`, `.h5`, `.hdf5`,
+`.tif`, and `.tiff` uploads. HDF5 and GeoTIFF cubes are loaded in memory,
+transformed with the training-fitted scaler/PCA, tiled into 32 x 32 patches,
+and returned with patch coordinates. GeoTIFF CRS, transform, bounds, width,
+and height metadata are preserved in the response.
+
+## PyTorch Baseline
+
+The project also includes a PyTorch 3D-CNN + Transformer implementation in
+`src/pytorch_hybrid.py`. It consumes the shared-PCA patches, converts them to
+channel-first tensors, and saves a CPU-compatible checkpoint:
+
+```powershell
+.venv\Scripts\python.exe src\pytorch_hybrid.py
+```
+
+The bounded one-epoch smoke baseline reached 40.62% validation accuracy. The
+TensorFlow shared-PCA 3D-CNN remains the application model at 46.88% test
+accuracy; the PyTorch model is included to satisfy the alternate ML engineering
+implementation and is not silently substituted into the API.
+Bootstrap uncertainty for the best model can be generated with:
+
+```powershell
+.venv\Scripts\python.exe src\bootstrap_metrics.py
+```
+
+The current patch-level 95% accuracy interval is 39.38% to 55.00%. Because
+patches from one source image are correlated, source-file-level cross-validation
+is still required for stronger final claims.
+
 ---
 
 # 📂 Dataset
@@ -284,6 +346,55 @@ TEST  | Samples: 160 | Shape: (160, 32, 32, 30)
 ✓ ALL SHARED PCA DATASET VALIDATION CHECKS PASSED
 ✓ READY FOR FRESH MODEL TRAINING
 ```
+
+---
+
+## Prediction API
+
+The current best shared-PCA 3D-CNN is available through a FastAPI service.
+The API accepts one PCA-reduced patch with shape `(32, 32, 30)`.
+
+Start the service from the project root:
+
+```powershell
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Endpoints:
+
+```text
+GET  /health
+POST /predict
+POST /explain
+POST /predict-mat
+```
+
+`/predict` returns the predicted class, confidence, and all class probabilities.
+`/explain` additionally returns spatial `(32, 32)` and spectral `(30,)`
+importance arrays. Requests must contain all `32 x 32 x 30` floating-point PCA
+values in the `patch` field. `/predict-mat` accepts a raw MATLAB `.mat` upload,
+applies the training-fitted shared scaler and PCA, creates spatial patches, and
+returns an image-level prediction with patch coordinates.
+
+Run the API integration tests with:
+
+```powershell
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+The suite covers dashboard and health responses, prediction probabilities,
+explainability dimensions, `.mat` upload inference, and invalid inputs.
+
+Confidence calibration is fitted on the validation split with:
+
+```powershell
+.venv\Scripts\python.exe src\calibrate_model.py
+```
+
+The fitted temperature is saved to
+`models/preprocessing/temperature_calibration.json` and applied automatically
+by the API. It does not change the predicted class or test accuracy; it only
+adjusts probability confidence.
 
 ---
 

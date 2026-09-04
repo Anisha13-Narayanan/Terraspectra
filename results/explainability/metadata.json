@@ -1,0 +1,12 @@
+{
+  "true_label": 0,
+  "true_class": "Alternaria alternata",
+  "predicted_label": 2,
+  "predicted_class": "Botrytis cinerea",
+  "confidence": 0.9999818801879883,
+  "cam_shape": [
+    32,
+    32,
+    30
+  ]
+}

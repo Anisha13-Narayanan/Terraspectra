@@ -4,3 +4,9 @@ scikit-learn
 tensorflow
 matplotlib
 pandas
+fastapi
+uvicorn
+python-multipart
+h5py
+rasterio
+torch

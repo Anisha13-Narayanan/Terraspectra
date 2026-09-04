@@ -1,0 +1,23 @@
+TERRASPECTRA - FINAL TEST RESULTS
+============================================================
+
+Model: models\best_vit.keras
+Test data: data\patches_shared_pca\test
+Test samples: 160
+Test Loss: 2.3869
+Test Accuracy: 0.3313
+Test Accuracy Percent: 33.13%
+
+CLASSIFICATION REPORT
+============================================================
+                      precision    recall  f1-score   support
+
+Alternaria alternata       0.00      0.00      0.00        32
+   Alternaria solani       0.86      0.94      0.90        32
+    Botrytis cinerea       0.40      0.72      0.52        32
+  Fusarium oxysporum       0.00      0.00      0.00        32
+             Healthy       0.00      0.00      0.00        32
+
+            accuracy                           0.33       160
+           macro avg       0.25      0.33      0.28       160
+        weighted avg       0.25      0.33      0.28       160

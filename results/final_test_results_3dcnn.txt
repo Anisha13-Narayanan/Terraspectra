@@ -1,6 +1,9 @@
 TERRASPECTRA - FINAL TEST RESULTS
 ============================================================
 
+Model: E:\Terraspectra\models\best_improved_3dcnn.keras
+Test data: E:\Terraspectra\data\patches\test
+Test samples: 160
 Test Loss: 4.6621
 Test Accuracy: 0.2313
 Test Accuracy Percent: 23.13%

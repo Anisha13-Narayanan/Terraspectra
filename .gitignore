@@ -17,6 +17,8 @@ data/raw/
 data/processed/
 data/splits/
 data/patches/
+data/processed_shared_pca/
+data/patches_shared_pca/
 
 # Large data formats
 *.mat
@@ -27,6 +29,11 @@ data/patches/
 *.keras
 *.pth
 *.pt
+*.joblib
+
+# React frontend
+frontend/node_modules/
+frontend/dist/
 
 # OS files
 .DS_Store

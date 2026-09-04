@@ -1,0 +1,17 @@
+{
+  "prediction_file": "E:\\Terraspectra\\results\\shared_pca_3dcnn\\predictions_3dcnn.csv",
+  "samples": 160,
+  "resamples": 10000,
+  "seed": 42,
+  "accuracy": 0.46875,
+  "accuracy_ci_95": [
+    0.39375,
+    0.55
+  ],
+  "macro_f1": 0.37245255685933654,
+  "macro_f1_ci_95": [
+    0.32907322206023293,
+    0.41173657185960394
+  ],
+  "note": "Patch-level bootstrap; source-file-level validation is still recommended."
+}

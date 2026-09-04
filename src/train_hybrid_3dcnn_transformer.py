@@ -1,4 +1,5 @@
 from pathlib import Path
+import argparse
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -16,8 +17,8 @@ MODELS_DIR = PROJECT_ROOT / "models"
 RESULTS_DIR = PROJECT_ROOT / "results"
 
 NUM_CLASSES = 5
-BATCH_SIZE = 8
-EPOCHS = 50
+BATCH_SIZE = 32
+EPOCHS = 5
 LEARNING_RATE = 0.0003
 SEED = 42
 
@@ -34,9 +35,9 @@ tf.random.set_seed(SEED)
 # LOAD DATA
 # ==========================================================
 
-def load_dataset(split_name):
+def load_dataset(split_name, patches_dir=PATCHES_DIR):
 
-    split_dir = PATCHES_DIR / split_name
+    split_dir = patches_dir / split_name
 
     X = np.load(split_dir / f"X_{split_name}.npy")
     y = np.load(split_dir / f"y_{split_name}.npy")
@@ -145,25 +146,30 @@ def build_hybrid_model(input_shape, num_classes):
     # 3D-CNN FEATURE EXTRACTION
     # ------------------------------------------------------
 
-    x = conv_block(inputs, 16, 0.10)
+    x = conv_block(inputs, 8, 0.10)
     x = layers.MaxPool3D(pool_size=(2, 2, 2))(x)
 
-    x = conv_block(x, 32, 0.15)
+    x = conv_block(x, 16, 0.15)
     x = layers.MaxPool3D(pool_size=(2, 2, 2))(x)
 
-    x = conv_block(x, 64, 0.20)
+    x = conv_block(x, 32, 0.20)
+
+    # Reduce the token count before self-attention.
+    x = layers.AveragePooling3D(
+        pool_size=(2, 2, 1)
+    )(x)
 
     # Shape approximately:
-    # (batch, 8, 8, 7, 64)
+    # (batch, 4, 4, 7, 32)
 
     # ------------------------------------------------------
     # CONVERT CNN FEATURES TO TRANSFORMER TOKENS
     # ------------------------------------------------------
 
-    x = layers.Reshape((-1, 64))(x)
+    x = layers.Reshape((-1, 32))(x)
 
     # Project features to Transformer dimension
-    x = layers.Dense(64)(x)
+    x = layers.Dense(32)(x)
 
     # ------------------------------------------------------
     # TRANSFORMER ENCODERS
@@ -171,17 +177,9 @@ def build_hybrid_model(input_shape, num_classes):
 
     x = transformer_encoder(
         x,
-        projection_dim=64,
-        num_heads=4,
-        transformer_units=128,
-        dropout_rate=0.20
-    )
-
-    x = transformer_encoder(
-        x,
-        projection_dim=64,
-        num_heads=4,
-        transformer_units=128,
+        projection_dim=32,
+        num_heads=2,
+        transformer_units=64,
         dropout_rate=0.20
     )
 
@@ -198,7 +196,7 @@ def build_hybrid_model(input_shape, num_classes):
     # ------------------------------------------------------
 
     x = layers.Dense(
-        128,
+        64,
         activation="relu",
         kernel_regularizer=regularizers.l2(1e-4)
     )(x)
@@ -208,7 +206,7 @@ def build_hybrid_model(input_shape, num_classes):
     x = layers.Dropout(0.40)(x)
 
     x = layers.Dense(
-        64,
+        32,
         activation="relu",
         kernel_regularizer=regularizers.l2(1e-4)
     )(x)
@@ -233,7 +231,26 @@ def build_hybrid_model(input_shape, num_classes):
 # MAIN TRAINING
 # ==========================================================
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Train the TerraSpectra CNN + Transformer hybrid."
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=PATCHES_DIR,
+        help="Directory containing train and val patch arrays.",
+    )
+    parser.add_argument(
+        "--model-stem",
+        default="hybrid_3dcnn_transformer",
+        help="Stem used for model and history artifacts.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
 
     print("=" * 60)
     print("TERRASPECTRA - 3D-CNN + TRANSFORMER HYBRID TRAINING")
@@ -243,8 +260,8 @@ def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Load train and validation data
-    X_train, y_train = load_dataset("train")
-    X_val, y_val = load_dataset("val")
+    X_train, y_train = load_dataset("train", args.data_dir)
+    X_val, y_val = load_dataset("val", args.data_dir)
 
     # Prepare for Conv3D
     X_train = prepare_data(X_train)
@@ -278,9 +295,7 @@ def main():
     # CALLBACKS
     # ------------------------------------------------------
 
-    best_model_path = (
-        MODELS_DIR / "best_hybrid_3dcnn_transformer.keras"
-    )
+    best_model_path = MODELS_DIR / f"best_{args.model_stem}.keras"
 
     training_callbacks = [
 
@@ -294,7 +309,7 @@ def main():
 
         callbacks.EarlyStopping(
             monitor="val_loss",
-            patience=10,
+            patience=2,
             restore_best_weights=True,
             verbose=1
         ),
@@ -302,7 +317,7 @@ def main():
         callbacks.ReduceLROnPlateau(
             monitor="val_loss",
             factor=0.5,
-            patience=4,
+            patience=1,
             min_lr=1e-6,
             verbose=1
         )
@@ -330,9 +345,7 @@ def main():
     # SAVE FINAL MODEL
     # ------------------------------------------------------
 
-    final_model_path = (
-        MODELS_DIR / "final_hybrid_3dcnn_transformer.keras"
-    )
+    final_model_path = MODELS_DIR / f"final_{args.model_stem}.keras"
 
     model.save(final_model_path)
 
@@ -342,10 +355,7 @@ def main():
 
     history_df = pd.DataFrame(history.history)
 
-    history_path = (
-        RESULTS_DIR /
-        "training_history_hybrid_3dcnn_transformer.csv"
-    )
+    history_path = RESULTS_DIR / f"training_history_{args.model_stem}.csv"
 
     history_df.to_csv(history_path, index=False)
 

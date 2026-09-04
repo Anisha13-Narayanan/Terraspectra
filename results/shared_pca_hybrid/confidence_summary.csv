@@ -1,0 +1,7 @@
+group,sample_count,mean_confidence,mean_confidence_correct,accuracy
+overall,160,0.3122790455818176,0.32819342613220215,0.2
+Alternaria alternata,64,0.2636675238609314,,0.0
+Alternaria solani,0,,,
+Botrytis cinerea,96,0.34468674659729004,0.32819342613220215,0.3333333333333333
+Fusarium oxysporum,0,,,
+Healthy,0,,,

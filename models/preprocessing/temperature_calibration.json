@@ -1,0 +1,9 @@
+{
+  "model": "E:\\Terraspectra\\models\\best_shared_pca_3dcnn.keras",
+  "validation_samples": 160,
+  "temperature": 1.4465697686260934,
+  "raw_nll": 0.981296718120575,
+  "calibrated_nll": 0.9450730085372925,
+  "raw_ece": 0.18110969904810192,
+  "calibrated_ece": 0.1173484988510609
+}
