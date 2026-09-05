@@ -6,7 +6,9 @@ import os
 import tempfile
 import logging
 
+
 import numpy as np
+import pandas as pd
 import joblib
 import scipy.io
 import tensorflow as tf
@@ -24,6 +26,11 @@ SCALER_PATH = PROJECT_ROOT / "models" / "preprocessing" / "shared_scaler.joblib"
 PCA_PATH = PROJECT_ROOT / "models" / "preprocessing" / "shared_pca30.joblib"
 CALIBRATION_PATH = PROJECT_ROOT / "models" / "preprocessing" / "temperature_calibration.json"
 MODEL_MANIFEST_PATH = PROJECT_ROOT / "models" / "deployment_manifest.json"
+TEMPORAL_ANALYSIS_PATH = (
+    PROJECT_ROOT / "data" / "temporal_prediction_analysis.csv"
+)
+
+
 
 CLASS_NAMES = [
     "Alternaria alternata",
@@ -421,6 +428,34 @@ def model_info():
     """Expose the selected deployment model and its evaluation context."""
     return get_deployment_metadata()
 
+
+@app.get("/temporal-analysis")
+def temporal_analysis():
+    """Return temporal prediction analysis for dashboard visualization."""
+
+    if not TEMPORAL_ANALYSIS_PATH.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Temporal analysis file not found: {TEMPORAL_ANALYSIS_PATH}",
+        )
+
+    try:
+        dataframe = pd.read_csv(TEMPORAL_ANALYSIS_PATH)
+        dataframe = dataframe.replace({np.nan: None})
+
+        return {
+            "status": "ok",
+            "source": str(TEMPORAL_ANALYSIS_PATH),
+            "records": dataframe.to_dict(orient="records"),
+        }
+
+    except Exception as error:
+        logger.exception("temporal_analysis_failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not read temporal analysis: {error}",
+        ) from error
+    
 
 @app.post("/predict")
 def predict(request: PatchRequest, _: None = Depends(verify_api_key)):
