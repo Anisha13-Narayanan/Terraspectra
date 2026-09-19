@@ -1,0 +1,16 @@
+{
+  "device": "cpu",
+  "cuda_available": false,
+  "max_cuda_memory_bytes": 0,
+  "best_validation_accuracy": 0.40625,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 1.312532647450765,
+      "train_accuracy": 0.3927083333333333,
+      "val_loss": 1.3154333114624024,
+      "val_accuracy": 0.40625,
+      "seconds": 11.026969099999405
+    }
+  ]
+}

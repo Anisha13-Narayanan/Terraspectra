@@ -1,4 +1,7 @@
 from pathlib import Path
+import argparse
+import json
+import time
 
 import numpy as np
 import torch
@@ -9,10 +12,11 @@ from torch.utils.data import DataLoader, TensorDataset
 PROJECT_ROOT = Path(r"E:\Terraspectra")
 DATA_DIR = PROJECT_ROOT / "data" / "patches_shared_pca"
 MODEL_PATH = PROJECT_ROOT / "models" / "pytorch_hybrid_baseline.pt"
+RESULTS_PATH = PROJECT_ROOT / "results" / "pytorch_hybrid_training.json"
 
 NUM_CLASSES = 5
 BATCH_SIZE = 32
-EPOCHS = 1
+EPOCHS = 20
 SEED = 42
 
 
@@ -84,13 +88,15 @@ def load_split(split_name):
     return features, torch.from_numpy(labels)
 
 
-def run_epoch(model, loader, loss_function, optimizer=None):
+def run_epoch(model, loader, loss_function, device, optimizer=None):
     training = optimizer is not None
     model.train(training)
     total_loss = 0.0
     correct = 0
     samples = 0
     for features, labels in loader:
+        features = features.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
         if training:
             optimizer.zero_grad()
         logits = model(features)
@@ -104,24 +110,53 @@ def run_epoch(model, loader, loss_function, optimizer=None):
     return total_loss / samples, correct / samples
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Train the TerraSpectra PyTorch 3D-CNN + Transformer baseline."
+    )
+    parser.add_argument("--epochs", type=int, default=EPOCHS)
+    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     torch.manual_seed(SEED)
+    if args.device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA was requested but is unavailable")
+    device_name = "cuda" if args.device == "auto" and torch.cuda.is_available() else args.device
+    if device_name == "auto":
+        device_name = "cpu"
+    device = torch.device(device_name)
     train_features, train_labels = load_split("train")
     val_features, val_labels = load_split("val")
-    train_loader = DataLoader(TensorDataset(train_features, train_labels), BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(TensorDataset(val_features, val_labels), BATCH_SIZE)
+    pin_memory = device.type == "cuda"
+    train_loader = DataLoader(TensorDataset(train_features, train_labels), args.batch_size, shuffle=True, pin_memory=pin_memory)
+    val_loader = DataLoader(TensorDataset(val_features, val_labels), args.batch_size, pin_memory=pin_memory)
 
-    model = PyTorchHybrid()
+    model = PyTorchHybrid().to(device)
     loss_function = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
-    for epoch in range(EPOCHS):
-        train_loss, train_accuracy = run_epoch(model, train_loader, loss_function, optimizer)
-        val_loss, val_accuracy = run_epoch(model, val_loader, loss_function)
-        print(f"epoch={epoch + 1} train_loss={train_loss:.4f} train_accuracy={train_accuracy:.4f} val_loss={val_loss:.4f} val_accuracy={val_accuracy:.4f}")
-
+    history = []
+    best_val_accuracy = -1.0
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), MODEL_PATH)
+    for epoch in range(args.epochs):
+        start_time = time.perf_counter()
+        train_loss, train_accuracy = run_epoch(model, train_loader, loss_function, device, optimizer)
+        with torch.no_grad():
+            val_loss, val_accuracy = run_epoch(model, val_loader, loss_function, device)
+        epoch_seconds = time.perf_counter() - start_time
+        print(f"epoch={epoch + 1} train_loss={train_loss:.4f} train_accuracy={train_accuracy:.4f} val_loss={val_loss:.4f} val_accuracy={val_accuracy:.4f}")
+        history.append({"epoch": epoch + 1, "train_loss": train_loss, "train_accuracy": train_accuracy, "val_loss": val_loss, "val_accuracy": val_accuracy, "seconds": epoch_seconds})
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            torch.save({"state_dict": model.state_dict(), "architecture": "PyTorch 3D-CNN + Transformer", "validation_accuracy": val_accuracy}, MODEL_PATH)
+
+    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    RESULTS_PATH.write_text(json.dumps({"device": str(device), "cuda_available": torch.cuda.is_available(), "max_cuda_memory_bytes": torch.cuda.max_memory_allocated() if device.type == "cuda" else 0, "best_validation_accuracy": best_val_accuracy, "history": history}, indent=2), encoding="utf-8")
     print(f"saved_model={MODEL_PATH}")
+    print(f"saved_audit={RESULTS_PATH}")
 
 
 if __name__ == "__main__":

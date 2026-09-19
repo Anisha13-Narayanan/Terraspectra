@@ -144,6 +144,9 @@ function FieldMap({ patches }) {
 
 function Analytics({ result }) {
   const summary = result.risk_summary || {};
+  const spectralAlerts = result.patch_predictions.filter(
+    (patch) => patch.spectral_anomaly_level === "high"
+  ).length;
 
   const affected =
     summary.patches_at_risk ??
@@ -191,6 +194,11 @@ function Analytics({ result }) {
                 2
               )} total acres`}
         </span>
+      </div>
+
+      <div>
+        <strong>{spectralAlerts}</strong>
+        <span>high spectral deviations</span>
       </div>
 
       {metadata.crs && (

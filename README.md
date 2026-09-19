@@ -48,15 +48,30 @@ the patch metrics because patches from one cube are correlated.
 ## React Frontend
 
 The React/Deck.gl frontend is in `frontend/`. Node.js 18+ and npm are required.
-Run it with:
+For local frontend development, run it separately with:
 
 ```powershell
 cd frontend
 npm install
 $env:VITE_API_URL = "http://127.0.0.1:8000"
 $env:VITE_MAPBOX_TOKEN = "your_mapbox_token"
-npm run dev
+npm.cmd run dev
 ```
+
+## Single-Platform Dashboard
+
+For a single local platform, build the React dashboard once and let FastAPI
+serve both the dashboard and API:
+
+```powershell
+npm.cmd --prefix frontend install
+npm.cmd --prefix frontend run build
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000`. The same service hosts the dashboard, API, and
+interactive API documentation at `/docs`; a separate Vite terminal is not
+required after the frontend build.
 
 The Mapbox token is optional. Without it, Deck.gl still renders the local
 pixel-coordinate disease overlay; with it, the map uses a Mapbox basemap.

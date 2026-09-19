@@ -15,6 +15,7 @@ import tensorflow as tf
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.geospatial import load_cube
@@ -58,7 +59,15 @@ model = None
 scaler = None
 pca = None
 temperature = 1.0
-FRONTEND_PATH = PROJECT_ROOT / "app" / "static" / "index.html"
+FRONTEND_DIST_PATH = PROJECT_ROOT / "frontend" / "dist"
+LEGACY_FRONTEND_PATH = PROJECT_ROOT / "app" / "static" / "index.html"
+
+if (FRONTEND_DIST_PATH / "assets").exists():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=FRONTEND_DIST_PATH / "assets"),
+        name="frontend-assets",
+    )
 
 
 class PatchRequest(BaseModel):
@@ -70,7 +79,11 @@ class PatchRequest(BaseModel):
 
 @app.get("/", include_in_schema=False)
 def dashboard():
-    return FileResponse(FRONTEND_PATH)
+    """Serve the production React dashboard and API from one FastAPI service."""
+    frontend_entrypoint = FRONTEND_DIST_PATH / "index.html"
+    return FileResponse(
+        frontend_entrypoint if frontend_entrypoint.exists() else LEGACY_FRONTEND_PATH
+    )
 
 
 def get_model():
@@ -267,6 +280,45 @@ def risk_summary(patch_predictions: list[dict[str, Any]]) -> dict[str, Any]:
     return summary
 
 
+def patch_spectral_anomaly_scores(patches: np.ndarray) -> np.ndarray:
+    """Return a PCA-space spectral-deviation proxy for every spatial patch.
+
+    It is a relative anomaly signal, not a laboratory chemical measurement.
+    A raw-band wavelength calibration is required before naming a specific
+    pigment or chemical index.
+    """
+    component_means = patches.mean(axis=(1, 2))
+    baseline = component_means.mean(axis=0, keepdims=True)
+    scale = component_means.std(axis=0, keepdims=True) + 1e-6
+    return np.sqrt(np.mean(((component_means - baseline) / scale) ** 2, axis=1))
+
+
+def build_patch_predictions(
+    patches: np.ndarray,
+    locations: list[dict[str, Any]],
+    probabilities: np.ndarray,
+) -> list[dict[str, Any]]:
+    predicted_labels = np.argmax(probabilities, axis=1)
+    confidences = probabilities.max(axis=1)
+    anomaly_scores = patch_spectral_anomaly_scores(patches)
+    return [
+        {
+            **location,
+            "predicted_label": int(label),
+            "predicted_class": CLASS_NAMES[int(label)],
+            "confidence": float(confidence),
+            "spectral_anomaly_score": float(anomaly_score),
+            "spectral_anomaly_level": (
+                "high" if anomaly_score >= 1.25 else "moderate"
+                if anomaly_score >= 0.75 else "low"
+            ),
+        }
+        for location, label, confidence, anomaly_score in zip(
+            locations, predicted_labels, confidences, anomaly_scores
+        )
+    ]
+
+
 def preprocess_geospatial(contents: bytes, filename: str):
     try:
         cube, metadata = load_cube(contents, filename)
@@ -358,19 +410,9 @@ def aggregate_patch_predictions(patch_batches, filename: str):
     metadata = {}
     for patches, locations, metadata in patch_batches:
         probabilities = predict_patches_in_batches(patches)
-        predicted_labels = np.argmax(probabilities, axis=1)
-        confidences = probabilities.max(axis=1)
         probability_sum += probabilities.sum(axis=0)
         patch_count += len(patches)
-        patch_predictions.extend(
-            {
-                **location,
-                "predicted_label": int(label),
-                "predicted_class": CLASS_NAMES[int(label)],
-                "confidence": float(confidence),
-            }
-            for location, label, confidence in zip(locations, predicted_labels, confidences)
-        )
+        patch_predictions.extend(build_patch_predictions(patches, locations, probabilities))
     response = prediction_response(probability_sum / patch_count)
     response.update({
         "filename": filename,
@@ -501,26 +543,12 @@ async def predict_mat(file: UploadFile = File(...), _: None = Depends(verify_api
 
     patches, locations, metadata = preprocess_geospatial(contents, file.filename)
     probabilities = predict_patches_in_batches(patches)
-    predicted_labels = np.argmax(probabilities, axis=1)
-    patch_confidences = probabilities.max(axis=1)
     image_probabilities = probabilities.mean(axis=0)
     response = prediction_response(image_probabilities)
     response["filename"] = file.filename
     response["geospatial_metadata"] = metadata
     response["patch_count"] = len(patches)
-    response["patch_predictions"] = [
-        {
-            **location,
-            "predicted_label": int(label),
-            "predicted_class": CLASS_NAMES[int(label)],
-            "confidence": float(confidence),
-        }
-        for location, label, confidence in zip(
-            locations,
-            predicted_labels,
-            patch_confidences,
-        )
-    ]
+    response["patch_predictions"] = build_patch_predictions(patches, locations, probabilities)
     response["risk_summary"] = risk_summary(response["patch_predictions"])
     logger.info("prediction_complete filename=%s patches=%s", file.filename, len(patches))
     return response
@@ -553,25 +581,12 @@ async def predict_geospatial(file: UploadFile = File(...), _: None = Depends(ver
 
     patches, locations, metadata = preprocess_geospatial(contents, file.filename)
     probabilities = predict_patches_in_batches(patches)
-    predicted_labels = np.argmax(probabilities, axis=1)
     image_probabilities = probabilities.mean(axis=0)
     response = prediction_response(image_probabilities)
     response["filename"] = file.filename
     response["patch_count"] = len(patches)
     response["geospatial_metadata"] = metadata
-    response["patch_predictions"] = [
-        {
-            **location,
-            "predicted_label": int(label),
-            "predicted_class": CLASS_NAMES[int(label)],
-            "confidence": float(confidence),
-        }
-        for location, label, confidence in zip(
-            locations,
-            predicted_labels,
-            probabilities.max(axis=1),
-        )
-    ]
+    response["patch_predictions"] = build_patch_predictions(patches, locations, probabilities)
     response["risk_summary"] = risk_summary(response["patch_predictions"])
     logger.info("geospatial_prediction_complete filename=%s patches=%s", file.filename, len(patches))
     return response

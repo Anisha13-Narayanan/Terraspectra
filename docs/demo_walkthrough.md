@@ -2,22 +2,20 @@
 
 ## Before the demo
 
-1. Start the API from the project root:
+1. Build the React dashboard from the project root:
 
    ```powershell
-   .venv\Scripts\python.exe -m uvicorn app.main:app --reload
+   npm.cmd --prefix frontend install
+   npm.cmd --prefix frontend run build
    ```
 
-2. Start the React dashboard in another terminal:
+2. Start the single FastAPI platform:
 
    ```powershell
-   cd frontend
-   npm install
-   $env:VITE_API_URL = "http://127.0.0.1:8000"
-   npm run dev
+   .venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
    ```
 
-3. Open `http://localhost:5173`. A Mapbox token is optional; without it, the
+3. Open `http://127.0.0.1:8000`. A Mapbox token is optional; without it, the
    pixel-coordinate map remains available.
 
 ## Five-minute demonstration

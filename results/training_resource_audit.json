@@ -1,0 +1,14 @@
+{
+  "dataset_path": "E:\\Terraspectra\\data\\patches_shared_pca\\train\\X_train.npy",
+  "tensor_shape": [
+    960,
+    32,
+    32,
+    30
+  ],
+  "tensor_dtype": "float32",
+  "single_patch_bytes": 122880,
+  "tensorflow_gpus": [],
+  "tensorflow_version": "2.21.0",
+  "note": "Tensor allocation audit; run the selected training script to capture epoch-time profiling."
+}
